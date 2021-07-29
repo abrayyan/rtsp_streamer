@@ -61,7 +61,7 @@ main (int argc, char *argv[])
 //    g_option_context_add_main_entries (optctx, entries, NULL);
 //    g_option_context_add_group (optctx, gst_init_get_option_group ());
 
-    char *pipeline_char = "( v4l2src ! videoconvert ! video/x-raw,format=I420 ! x265enc speed-preset=ultrafast tune=zerolatency ! rtph265pay name=pay0 pt=96 )";
+    char *pipeline_char = "( v4l2src ! video/x-raw,width=1280,height=720 ! videoconvert ! video/x-raw,format=I420 ! x265enc speed-preset=ultrafast tune=zerolatency ! rtph265pay name=pay0 pt=96 )";
 
 
 //    if (!g_option_context_parse (optctx, &argc, &argv, &error)) {
