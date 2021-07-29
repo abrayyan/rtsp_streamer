@@ -42,6 +42,9 @@ static GOptionEntry entries[] = {
 int
 main (int argc, char *argv[])
 {
+
+    gst_init(&argc, &argv);
+
     GMainLoop *loop;
     GstRTSPServer *server;
     GstRTSPMountPoints *mounts;
@@ -49,17 +52,25 @@ main (int argc, char *argv[])
     GOptionContext *optctx;
     GError *error = NULL;
 
-    optctx = g_option_context_new ("<launch line> - Test RTSP Server, Launch\n\n"
-                                   "Example: \"( videotestsrc ! x264enc ! rtph264pay name=pay0 pt=96 )\"");
-    g_option_context_add_main_entries (optctx, entries, NULL);
-    g_option_context_add_group (optctx, gst_init_get_option_group ());
-    if (!g_option_context_parse (optctx, &argc, &argv, &error)) {
-        g_printerr ("Error parsing options: %s\n", error->message);
-        g_option_context_free (optctx);
-        g_clear_error (&error);
-        return -1;
-    }
-    g_option_context_free (optctx);
+    // v4l2src ! videoconvert ! video/x-raw,format=I420 ! x265enc ! rtph265pay name=pay0 pt=96
+
+//    optctx = g_option_context_new ("<launch line> - Test RTSP Server, Launch\n\n"
+//                                   "Example: \"( videotestsrc ! x264enc ! rtph264pay name=pay0 pt=96 )\"");
+//
+//
+//    g_option_context_add_main_entries (optctx, entries, NULL);
+//    g_option_context_add_group (optctx, gst_init_get_option_group ());
+
+    char *pipeline_char = "( v4l2src ! videoconvert ! video/x-raw,format=I420 ! x265enc speed-preset=ultrafast tune=zerolatency ! rtph265pay name=pay0 pt=96 )";
+
+
+//    if (!g_option_context_parse (optctx, &argc, &argv, &error)) {
+//        g_printerr ("Error parsing options: %s\n", error->message);
+//        g_option_context_free (optctx);
+//        g_clear_error (&error);
+//        return -1;
+//    }
+//    g_option_context_free (optctx);
 
     loop = g_main_loop_new (NULL, FALSE);
 
@@ -67,16 +78,22 @@ main (int argc, char *argv[])
     server = gst_rtsp_server_new ();
     g_object_set (server, "service", port, NULL);
 
+
     /* get the mount points for this server, every server has a default object
      * that be used to map uri mount points to media factories */
     mounts = gst_rtsp_server_get_mount_points (server);
+
 
     /* make a media factory for a test stream. The default media factory can use
      * gst-launch syntax to create pipelines.
      * any launch line works as long as it contains elements named pay%d. Each
      * element with pay%d names will be a stream */
     factory = gst_rtsp_media_factory_new ();
-    gst_rtsp_media_factory_set_launch (factory, argv[1]);
+
+    //TODO ; add option to read form cl
+    gst_rtsp_media_factory_set_launch (factory, pipeline_char);
+
+    //gst_rtsp_media_factory_set_launch (factory, pipeline_char);
     gst_rtsp_media_factory_set_shared (factory, TRUE);
     //gst_rtsp_media_factory_set_enable_rtcp (factory, !disable_rtcp);
 
@@ -88,7 +105,8 @@ main (int argc, char *argv[])
     g_object_unref (mounts);
 
     /* attach the server to the default maincontext */
-    gst_rtsp_server_attach (server, NULL);
+    if (gst_rtsp_server_attach(server, NULL) == 0)
+        return 1;
 
     /* start serving */
     g_print ("stream ready at rtsp://127.0.0.1:%s/test\n", port);
