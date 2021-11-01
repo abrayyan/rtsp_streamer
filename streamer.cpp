@@ -24,20 +24,37 @@
 #include <gst/gst.h>
 
 #include <gst/rtsp-server/rtsp-server.h>
+#include <algorithm>
+
 
 #define DEFAULT_RTSP_PORT "8554"
 #define DEFAULT_DISABLE_RTCP FALSE
+#define DEFAULT_STREAM_NAME "stream"
+#define DEFAULT_VIDEO_SOURCE 0
+#define DEFAULT_WIDTH 1280
+#define DEFAULT_HEIGHT 720
 
+
+static char *stream_name = (char *) DEFAULT_STREAM_NAME;
 static char *port = (char *) DEFAULT_RTSP_PORT;
 static gboolean disable_rtcp = DEFAULT_DISABLE_RTCP;
 
-static GOptionEntry entries[] = {
-        {"port", 'p', 0, G_OPTION_ARG_STRING, &port,
-                "Port to listen on (default: " DEFAULT_RTSP_PORT ")", "PORT"},
-        {"disable-rtcp", '\0', 0, G_OPTION_ARG_NONE, &disable_rtcp,
-                "Whether RTCP should be disabled (default false)", NULL},
-        {NULL}
-};
+
+char* getCmdOption(char ** begin, char ** end, const std::string & option)
+{
+    char ** itr = std::find(begin, end, option);
+    if (itr != end && ++itr != end)
+    {
+        return *itr;
+    }
+    return 0;
+}
+
+bool cmdOptionExists(char** begin, char** end, const std::string& option)
+{
+    return std::find(begin, end, option) != end;
+}
+
 
 int
 main (int argc, char *argv[])
@@ -49,28 +66,33 @@ main (int argc, char *argv[])
     GstRTSPServer *server;
     GstRTSPMountPoints *mounts;
     GstRTSPMediaFactory *factory;
-    GOptionContext *optctx;
-    GError *error = NULL;
-
-    // v4l2src ! videoconvert ! video/x-raw,format=I420 ! x265enc ! rtph265pay name=pay0 pt=96
-
-//    optctx = g_option_context_new ("<launch line> - Test RTSP Server, Launch\n\n"
-//                                   "Example: \"( videotestsrc ! x264enc ! rtph264pay name=pay0 pt=96 )\"");
-//
-//
-//    g_option_context_add_main_entries (optctx, entries, NULL);
-//    g_option_context_add_group (optctx, gst_init_get_option_group ());
-
-    char *pipeline_char = "( v4l2src ! video/x-raw,width=1280,height=720 ! videoconvert ! video/x-raw,format=I420 ! x265enc speed-preset=ultrafast tune=zerolatency ! rtph265pay name=pay0 pt=96 )";
 
 
-//    if (!g_option_context_parse (optctx, &argc, &argv, &error)) {
-//        g_printerr ("Error parsing options: %s\n", error->message);
-//        g_option_context_free (optctx);
-//        g_clear_error (&error);
-//        return -1;
-//    }
-//    g_option_context_free (optctx);
+    char pipeline[250];
+    int ret, video_reference = DEFAULT_VIDEO_SOURCE, width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT;
+
+    char * portc = getCmdOption(argv, argv + argc, "-p");
+    if (portc)
+    {
+        port = portc;
+    }
+
+    char * heightc = getCmdOption(argv, argv + argc, "-h");
+    if (heightc)
+    {
+        height = atoi(heightc);
+    }
+
+    char * widthc = getCmdOption(argv, argv + argc, "-w");
+    if (widthc)
+    {
+        width = atoi(widthc);
+    }
+
+    ret = sprintf(pipeline, "( v4l2src device=\"/dev/video%d\" ! videoconvert ! videoscale ! video/x-raw,format=I420,width=%d,height=%d ! x265enc speed-preset=ultrafast tune=zerolatency ! rtph265pay name=pay0 pt=96 )", video_reference, width, height);
+
+    //"( v4l2src device="/dev/video0" ! videoconvert ! video/x-raw,format=I420 ! x265enc ! rtph265pay name=pay0 pt=96 )"
+    //char *pipeline_char = "( v4l2src device=\"/dev/video4\" ! video/x-raw,width=1280,height=720 ! videoconvert ! video/x-raw,format=I420 ! x265enc speed-preset=ultrafast tune=zerolatency ! rtph265pay name=pay0 pt=96 )";
 
     loop = g_main_loop_new (NULL, FALSE);
 
@@ -91,7 +113,7 @@ main (int argc, char *argv[])
     factory = gst_rtsp_media_factory_new ();
 
     //TODO ; add option to read form cl
-    gst_rtsp_media_factory_set_launch (factory, pipeline_char);
+    gst_rtsp_media_factory_set_launch (factory, pipeline);
 
     //gst_rtsp_media_factory_set_launch (factory, pipeline_char);
     gst_rtsp_media_factory_set_shared (factory, TRUE);
@@ -99,7 +121,9 @@ main (int argc, char *argv[])
 
 
     /* attach the test factory to the /test url */
-    gst_rtsp_mount_points_add_factory (mounts, "/test", GST_RTSP_MEDIA_FACTORY(factory));
+    char stream_source[64];
+    sprintf(stream_source, "/%s", stream_name);
+    gst_rtsp_mount_points_add_factory (mounts, stream_source, GST_RTSP_MEDIA_FACTORY(factory));
 
     /* don't need the ref to the mapper anymore */
     g_object_unref (mounts);
@@ -109,10 +133,8 @@ main (int argc, char *argv[])
         return 1;
 
     /* start serving */
-    g_print ("stream ready at rtsp://127.0.0.1:%s/test\n", port);
+    g_print ("stream ready at rtsp://127.0.0.1:%s/%s\n", port, stream_name);
     g_main_loop_run (loop);
 
     return 0;
 }
-
-//video/x-h264,profile=high-4:2:2
